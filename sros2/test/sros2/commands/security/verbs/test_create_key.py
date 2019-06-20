@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import tempfile
 from xml.etree import ElementTree
 
 import cryptography
@@ -22,9 +21,27 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from ros2cli import cli
+import pytest
 
+from ros2cli import cli
 from sros2.api import create_keystore
+
+
+# This fixture will run once for the entire module (as opposed to once per test)
+@pytest.fixture(scope='module')
+def node_keys_dir(tmp_path_factory):
+    keystore_dir = str(tmp_path_factory.mktemp('keystore'))
+
+    # First, create the keystore
+    assert create_keystore(keystore_dir)
+
+    # Now using that keystore, create a keypair along with other files required by DDS
+    assert cli.main(argv=['security', 'create_key', keystore_dir, '/test_node']) == 0
+    node_dir = os.path.join(keystore_dir, 'test_node')
+    assert os.path.isdir(os.path.join(keystore_dir, 'test_node'))
+
+    # Return path to directory containing the node's files
+    return node_dir
 
 
 def load_cert(path):
@@ -62,69 +79,71 @@ def verify_signature(cert, signatory):
     return True
 
 
-def check_cert_pem(path, signatory):
-    cert = load_cert(path)
+def test_cert_pem(node_keys_dir):
+    cert = load_cert(os.path.join(node_keys_dir, 'cert.pem'))
     check_common_name(cert.subject, u'/test_node')
     check_common_name(cert.issuer, u'sros2testCA')
+
+    signatory = load_cert(os.path.join(node_keys_dir, 'identity_ca.cert.pem'))
     assert verify_signature(cert, signatory)
 
 
-def check_permissions_xml(path, signatory):
-    ElementTree.parse(path)
+def test_permissions_xml(node_keys_dir):
+    ElementTree.parse(os.path.join(node_keys_dir, 'permissions.xml'))
 
 
-def check_permissions_ca_cert_pem(path, signatory):
-    cert = load_cert(path)
+def test_permissions_ca_cert_pem(node_keys_dir):
+    cert = load_cert(os.path.join(node_keys_dir, 'permissions_ca.cert.pem'))
     check_common_name(cert.subject, u'sros2testCA')
     check_common_name(cert.issuer, u'sros2testCA')
+
+    signatory = load_cert(os.path.join(node_keys_dir, 'identity_ca.cert.pem'))
     assert verify_signature(cert, signatory)
 
 
-def check_req_pem(path, signatory):
-    csr = load_csr(path)
+def test_req_pem(node_keys_dir):
+    csr = load_csr(os.path.join(node_keys_dir, 'req.pem'))
     check_common_name(csr.subject, u'/test_node')
 
 
-def check_key_pem(path, signatory):
-    private_key = load_private_key(path)
+def test_key_pem(node_keys_dir):
+    private_key = load_private_key(os.path.join(node_keys_dir, 'key.pem'))
     public_key = private_key.public_key()
     assert isinstance(public_key.curve, ec.SECP256R1)
 
 
-def check_identity_ca_cert_pem(path):
-    cert = load_cert(path)
+def test_identity_ca_cert_pem(node_keys_dir):
+    cert = load_cert(os.path.join(node_keys_dir, 'identity_ca.cert.pem'))
     check_common_name(cert.subject, u'sros2testCA')
     check_common_name(cert.issuer, u'sros2testCA')
-    return cert
 
+# def test_create_key():
+#     with tempfile.TemporaryDirectory() as keystore_dir:
+#         # First, create the keystore
+#         assert create_keystore(keystore_dir)
 
-def test_create_key():
-    with tempfile.TemporaryDirectory() as keystore_dir:
-        # First, create the keystore
-        assert create_keystore(keystore_dir)
+#         # Now using that keystore, create a keypair
+#         assert cli.main(argv=['security', 'create_key', keystore_dir, '/test_node']) == 0
+#         assert os.path.isdir(os.path.join(keystore_dir, 'test_node'))
 
-        # Now using that keystore, create a keypair
-        assert cli.main(argv=['security', 'create_key', keystore_dir, '/test_node']) == 0
-        assert os.path.isdir(os.path.join(keystore_dir, 'test_node'))
+#         expected_files = (
+#             ('cert.pem', check_cert_pem),
+#             ('permissions.xml', check_permissions_xml),
+#             ('permissions_ca.cert.pem', check_permissions_ca_cert_pem),
+#             ('request.cnf', None),
+#             ('req.pem', check_req_pem),
+#             ('permissions.p7s', None),
+#             ('key.pem', check_key_pem),
+#             ('governance.p7s', None),
+#             ('ecdsaparam', None),
+#         )
 
-        expected_files = (
-            ('cert.pem', check_cert_pem),
-            ('permissions.xml', check_permissions_xml),
-            ('permissions_ca.cert.pem', check_permissions_ca_cert_pem),
-            ('request.cnf', None),
-            ('req.pem', check_req_pem),
-            ('permissions.p7s', None),
-            ('key.pem', check_key_pem),
-            ('governance.p7s', None),
-            ('ecdsaparam', None),
-        )
+#         signatory_path = os.path.join(keystore_dir, 'test_node', 'identity_ca.cert.pem')
+#         assert os.path.isfile(signatory_path)
+#         signatory = check_identity_ca_cert_pem(signatory_path)
 
-        signatory_path = os.path.join(keystore_dir, 'test_node', 'identity_ca.cert.pem')
-        assert os.path.isfile(signatory_path)
-        signatory = check_identity_ca_cert_pem(signatory_path)
-
-        for expected_file, file_validator in expected_files:
-            path = os.path.join(keystore_dir, 'test_node', expected_file)
-            assert os.path.isfile(path)
-            if file_validator:
-                file_validator(path, signatory)
+#         for expected_file, file_validator in expected_files:
+#             path = os.path.join(keystore_dir, 'test_node', expected_file)
+#             assert os.path.isfile(path)
+#             if file_validator:
+#                 file_validator(path, signatory)
