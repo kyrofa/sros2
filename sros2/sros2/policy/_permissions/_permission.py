@@ -28,6 +28,13 @@ class UnsupportedPolicyError(PolicyError):
         super().__init__('Unsupported SROS 2 policy: {}'.format(why))
 
 
+class UnsupportedPermissionTypeError(PolicyError):
+
+    def __init__(self, type_string: str):
+        super().__init__('Unsupported permission type: {!r}'.format(type_string))
+        self.type = type_string
+
+
 @enum.unique
 class PermissionType(enum.Enum):
     # Enum values should map to their XML values
@@ -37,18 +44,7 @@ class PermissionType(enum.Enum):
 
 
 @enum.unique
-class PermissionRuleType(enum.Enum):
-    # Enum values should map to their XML values
-    SUBSCRIBE = 'subscribe'
-    PUBLISH = 'publish'
-    REPLY = 'reply'
-    REQUEST = 'request'
-    CALL = 'call'
-    EXECUTE = 'execute'
-
-
-@enum.unique
-class PermissionRuleQualifier(enum.Enum):
+class PermissionQualifier(enum.Enum):
     # Enum values should map to their XML values
     ALLOW = 'ALLOW'
     DENY = 'DENY'
@@ -56,25 +52,6 @@ class PermissionRuleQualifier(enum.Enum):
 
 class Permission:
     """Class representation of a profile's permission within an XML security policy."""
-
-    @classmethod
-    def from_fields(
-            cls, permission_type: PermissionType, rule_type: PermissionRuleType,
-            rule_qualifier: PermissionRuleQualifier) -> 'Permission':
-        """
-        Create new Permission instance from its fields.
-
-        :param PermissionType permission_type: The type of permission.
-        :param PermissionRuleType rule_type: The type of rule.
-        :param PermissionRuleQualifier rule_qualifier: Qualifier for the rule.
-
-        :returns: The newly-created permission.
-        :rtype: Permission
-        """
-        permission = etree.Element(permission_type.value)
-        permission.attrib[rule_type.value] = rule_qualifier.value
-
-        return cls(permission)
 
     def __init__(self, permission: etree.Element) -> None:
         """
@@ -90,7 +67,10 @@ class Permission:
 
         :rtype: PermissionType
         """
-        return PermissionType(self._permission.tag)
+        try:
+            return PermissionType(self._permission.tag)
+        except ValueError as e:
+            raise UnsupportedPermissionTypeError(self._permission.tag) from e
 
     def get_rule_type(self) -> PermissionRuleType:
         """
