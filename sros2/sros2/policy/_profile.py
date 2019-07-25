@@ -34,8 +34,8 @@ class Profile:
         :rtype: Profile
         """
         profile = etree.Element('profile')
-        profile.attrib['ns'] = namespace
-        profile.attrib['node'] = node_name
+        profile.set('ns', namespace)
+        profile.set('node', node_name)
 
         return cls(profile)
 
@@ -62,6 +62,12 @@ class Profile:
         :rtype: str
         """
         return self._profile.get('ns')
+
+    def get_fqn(self) -> str:
+        return '/'.join([
+            self.get_namespace().rstrip('/'),
+            self.get_node(),
+        ])
 
     def get_permissions(self) -> List[Permission]:
         """

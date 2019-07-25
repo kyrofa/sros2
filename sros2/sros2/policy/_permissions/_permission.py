@@ -13,26 +13,12 @@
 # limitations under the License.
 
 import enum
-from typing import List
+from typing import Dict, Iterable, Set
 
 from lxml import etree
 
-from . import PolicyError
-from ._expression import Expression
-
-
-class UnsupportedPolicyError(PolicyError):
-    """Not necessarily an invalid policy, but one this class doesn't support."""
-
-    def __init__(self, why):
-        super().__init__('Unsupported SROS 2 policy: {}'.format(why))
-
-
-class UnsupportedPermissionTypeError(PolicyError):
-
-    def __init__(self, type_string: str):
-        super().__init__('Unsupported permission type: {!r}'.format(type_string))
-        self.type = type_string
+from .. import PolicyError, _expression, _profile
+from ._capabilities import _capability
 
 
 @enum.unique
@@ -50,8 +36,56 @@ class PermissionQualifier(enum.Enum):
     DENY = 'DENY'
 
 
+class UnsupportedPolicyError(PolicyError):
+    """Not necessarily an invalid policy, but one this class doesn't support."""
+
+    def __init__(self, why):
+        super().__init__('Unsupported SROS 2 policy: {}'.format(why))
+
+
+class UnsupportedPermissionTypeError(PolicyError):
+
+    def __init__(self, type_string: str):
+        super().__init__('Unsupported permission type: {!r}'.format(type_string))
+        self.type = type_string
+
+
+class UnsupportedCapabilityTypeError(PolicyError):
+
+    def __init__(self, permission_type: PermissionType, capability_type: _capability.CapabilityType):
+        super().__init__('Permission type {!r} does not support capability type {!r}'.format(
+            permission_type.value, capability_type.value))
+        self.permission_type = permission_type
+        self.capability_type = capability_type
+
+
 class Permission:
     """Class representation of a profile's permission within an XML security policy."""
+
+    _supported_capabilities = set()  # type: Set[_capability.Capability]
+    _type = None  # type: PermissionType
+    _expression_type = None  # type: _expression.ExpressionType
+
+    @classmethod
+    def from_fields(
+            cls,
+            capabilities: Dict[_capability.Capability: PermissionQualifier]) -> 'Permission':
+        """
+        Create new Permission instance from its fields.
+
+        :param PermissionType permission_type: The type of permission.
+        :param PermissionRuleType rule_type: The type of rule.
+        :param PermissionRuleQualifier rule_qualifier: Qualifier for the rule.
+
+        :returns: The newly-created permission.
+        :rtype: Permission
+        """
+        permission = etree.Element(cls._type.value)
+
+        for capability, qualifier in capabilities.items():
+            permission.attrib[capability.value] = qualifier.value
+
+        return cls(permission)
 
     def __init__(self, permission: etree.Element) -> None:
         """
@@ -72,28 +106,21 @@ class Permission:
         except ValueError as e:
             raise UnsupportedPermissionTypeError(self._permission.tag) from e
 
-    def get_rule_type(self) -> PermissionRuleType:
-        """
-        Return the type of the rule.
+    def get_capabilities(self) -> Iterable[_capability.Capability]:
+        capabilities = []
+        for attribute in self._permission.keys():
+            capabilities.append(_capability.Capability(self._permission, attribute))
 
-        :rtype: PermissionRuleType
-        """
-        keys = self._permission.keys()
-        if len(keys) != 1:
-            raise UnsupportedPolicyError(
-                'Expected a single attribute to determine rule type, got {!r}'.format(keys))
+        return capabilities
 
-        return PermissionRuleType(keys[0])
+    def add_capability(self, capability: _capability.Capability) -> _capability.Capability:
+        if capability.get_type() not in self._supported_capabilities:
+            raise UnsupportedCapabilityTypeError(self.get_type(), capability)
 
-    def get_rule_qualifier(self) -> PermissionRuleQualifier:
-        """
-        Return the qualifier of the rule.
+        capability._use_permission(self)
+        return capability
 
-        :rtype: PermissionRuleQualifier
-        """
-        return PermissionRuleQualifier(self._permission.get(self.get_rule_type().value))
-
-    def get_expressions(self) -> List[Expression]:
+    def get_expressions(self) -> Iterable[str]:
         """
         Return all expressions making up the permission.
 
@@ -101,21 +128,13 @@ class Permission:
         """
         expressions = []
         for child in self._permission:
-            expressions.append(Expression(child))
+            expressions.append(child.text)
 
         return expressions
 
-    def add_expression(self, expression: Expression) -> Expression:
-        """
-        Add expression to the permission.
-
-        :param Expression expression: Expression to be added.
-
-        :returns: The expression that was added
-        :rtype: Expression
-
-        Future modifications of the expression will be reflected in this permission once this
-        function is called.
-        """
+    def add_expression(self, pattern: str) -> _expression.Expression:
+        profile = _profile.Profile(self._permission.parent())
+        expression = _expression.Expression.from_fields(
+            profile.get_fqn(), profile.get_namespace(), self._expression_type, pattern)
         self._permission.append(expression._expression)
         return expression

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ._permission import Permission
 from ._actions import ActionsPermission
 from ._servies import ServicesPermission
 from ._topics import TopicsPermission
