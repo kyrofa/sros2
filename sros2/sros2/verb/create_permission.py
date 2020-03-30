@@ -39,7 +39,7 @@ class CreatePermissionVerb(VerbExtension):
         arg.completer = FilesCompleter(
             allowednames=('xml'), directories=False)
 
-    def main(self, *, args):
+    def main(self, *, parser, args):
         try:
             success = create_permission(args.ROOT, args.NAME, args.POLICY_FILE_PATH)
         except FileNotFoundError as e:

@@ -113,7 +113,7 @@ class GeneratePolicyVerb(VerbExtension):
                 permission.text = expression.fqn
             permissions.append(permission)
 
-    def main(self, *, args):
+    def main(self, *, parser, args):
         policy = self.get_policy(args.POLICY_FILE_PATH)
         with NodeStrategy(args) as node:
             node_names = get_node_names(node=node, include_hidden_nodes=False)

@@ -42,7 +42,7 @@ class GenerateArtifactsVerb(VerbExtension):
         arg.completer = FilesCompleter(
             allowednames=('xml'), directories=False)
 
-    def main(self, *, args):
+    def main(self, *, parser, args):
         try:
             success = generate_artifacts(
                 args.keystore_root_path, args.node_names, args.policy_files)

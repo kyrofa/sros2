@@ -31,6 +31,6 @@ class DistributeKeyVerb(VerbExtension):
         parser.add_argument('TARGET', help='target keystore path')
         arg.completer = DirectoriesCompleter()
 
-    def main(self, *, args):
+    def main(self, *, parser, args):
         success = distribute_key(args.ROOT, args.TARGET)
         return 0 if success else 1

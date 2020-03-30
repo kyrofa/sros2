@@ -31,7 +31,7 @@ class ListKeysVerb(VerbExtension):
         arg = parser.add_argument('ROOT', help='root path of keystore')
         arg.completer = DirectoriesCompleter()
 
-    def main(self, *, args):
+    def main(self, *, parser, args):
         try:
             if list_keys(args.ROOT):
                 return 0

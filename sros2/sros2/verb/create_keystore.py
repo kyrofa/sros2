@@ -29,6 +29,6 @@ class CreateKeystoreVerb(VerbExtension):
         arg = parser.add_argument('ROOT', help='root path of keystore')
         arg.completer = DirectoriesCompleter()
 
-    def main(self, *, args):
+    def main(self, *, parser, args):
         success = create_keystore(args.ROOT)
         return 0 if success else 1
