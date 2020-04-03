@@ -18,7 +18,6 @@ except ImportError:
     def DirectoriesCompleter():
         return None
 
-from sros2.api import distribute_key
 from sros2.verb import VerbExtension
 
 
@@ -32,5 +31,9 @@ class DistributeKeyVerb(VerbExtension):
         arg.completer = DirectoriesCompleter()
 
     def main(self, *, args):
-        success = distribute_key(args.ROOT, args.TARGET)
+        success = _distribute_key(args.ROOT, args.TARGET)
         return 0 if success else 1
+
+
+def _distribute_key(source_keystore_path, taget_keystore_path):
+    raise NotImplementedError()
